@@ -1,4 +1,4 @@
-name: Build ALTIV Android Beta 3
+name: Build ALTIV Android Beta 4
 on:
   workflow_dispatch:
   push:
@@ -24,10 +24,10 @@ jobs:
         working-directory: android
         run: gradle assembleDebug
       - name: Prepare APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk ALTIV-Afiliados-IA-Beta3.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk ALTIV-Afiliados-IA-Beta4.apk
       - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete beta-3 --yes --cleanup-tag 2>/dev/null || true
-          gh release create beta-3 ALTIV-Afiliados-IA-Beta3.apk --title "ALTIV Afiliados IA - Beta 3" --notes "Interface mais intuitiva, onboarding simples, navegação inferior e fluxo Radar > Criar > Publicar."
+          gh release delete beta-4 --yes --cleanup-tag 2>/dev/null || true
+          gh release create beta-4 ALTIV-Afiliados-IA-Beta4.apk --title "ALTIV Afiliados IA - Beta 4" --notes "Agente de Achados com ranking demonstrativo, fluxo produto > link > texto > publicação, copiar conteúdo e compartilhar com WhatsApp/Instagram."

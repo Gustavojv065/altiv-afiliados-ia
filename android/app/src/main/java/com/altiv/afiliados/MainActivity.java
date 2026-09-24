@@ -1,19 +1,31 @@
 package com.altiv.afiliados;
 
 import android.app.Activity;
-import android.content.SharedPreferences;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private final int BG = Color.rgb(5, 8, 13);
@@ -21,19 +33,49 @@ public class MainActivity extends Activity {
     private final int SURFACE_2 = Color.rgb(17, 25, 36);
     private final int BLUE = Color.rgb(20, 115, 255);
     private final int BLUE_SOFT = Color.rgb(119, 173, 255);
+    private final int GREEN = Color.rgb(73, 213, 148);
     private final int TEXT = Color.rgb(245, 248, 255);
     private final int MUTED = Color.rgb(158, 172, 192);
+
     private LinearLayout content;
-    private LinearLayout nav;
-    private SharedPreferences prefs;
+    private Product selectedProduct;
+    private String generatedCopy = "";
+    private String preparedLink = "";
+
+    private static class Product {
+        String name;
+        double price;
+        double commissionPct;
+        int sales;
+        int trend;
+        int score;
+
+        Product(String name, double price, double commissionPct, int sales, int trend) {
+            this.name = name;
+            this.price = price;
+            this.commissionPct = commissionPct;
+            this.sales = sales;
+            this.trend = trend;
+            this.score = score();
+        }
+
+        int score() {
+            double salesScore = Math.min(100.0, sales / 150.0);
+            double commissionScore = Math.min(100.0, commissionPct * 5.0);
+            double trendScore = Math.min(100.0, trend);
+            return (int) Math.round(salesScore * 0.45 + commissionScore * 0.35 + trendScore * 0.20);
+        }
+
+        double estimatedCommission() {
+            return price * (commissionPct / 100.0);
+        }
+    }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        prefs = getSharedPreferences("altiv_prefs", MODE_PRIVATE);
-        if (!prefs.getBoolean("intro_seen", false)) showIntro();
-        else showHome();
+        showHome();
     }
 
     private GradientDrawable bg(int color, float radius, int strokeColor) {
@@ -69,7 +111,7 @@ public class MainActivity extends Activity {
         b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         b.setBackground(bg(BLUE, 28, Color.TRANSPARENT));
         b.setOnClickListener(click);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 118);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 112);
         lp.setMargins(0, 8, 0, 8);
         b.setLayoutParams(lp);
         return b;
@@ -81,11 +123,26 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private LinearLayout card(String eyebrow, String title, String body, String action, View.OnClickListener click) {
+    private EditText input(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        e.setHintTextColor(Color.rgb(105, 122, 146));
+        e.setTextColor(TEXT);
+        e.setTextSize(15);
+        e.setSingleLine(false);
+        e.setPadding(24, 18, 24, 18);
+        e.setBackground(bg(SURFACE_2, 24, Color.rgb(38, 54, 76)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 8, 0, 10);
+        e.setLayoutParams(lp);
+        return e;
+    }
+
+    private LinearLayout card(String eyebrow, String title, String body) {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(28, 24, 28, 24);
-        c.setBackground(bg(SURFACE, 30, Color.rgb(24, 38, 56)));
+        c.setPadding(26, 22, 26, 22);
+        c.setBackground(bg(SURFACE, 28, Color.rgb(24, 38, 56)));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, 10, 0, 10);
         c.setLayoutParams(lp);
@@ -96,47 +153,37 @@ public class MainActivity extends Activity {
             c.addView(e);
             c.addView(gap(8));
         }
-
         c.addView(label(title, 20, TEXT, true));
         c.addView(gap(8));
         c.addView(label(body, 15, MUTED, false));
-
-        if (action != null && click != null) {
-            c.addView(gap(18));
-            Button b = secondary(action, click);
-            b.getLayoutParams().height = 100;
-            c.addView(b);
-        }
         return c;
     }
 
-    private void startScreen(String section, String title, String subtitle, int activeIndex) {
+    private void startScreen(String title, String subtitle, int activeIndex) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        scroll.setLayoutParams(scrollLp);
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(34, 28, 34, 34);
+        content.setPadding(32, 28, 32, 34);
         scroll.addView(content);
 
-        TextView brand = label("ALTIV • AFILIADOS IA", 12, BLUE_SOFT, true);
+        TextView brand = label("ALTIV • AGENTE DE ACHADOS", 12, BLUE_SOFT, true);
         brand.setLetterSpacing(.10f);
         content.addView(brand);
         content.addView(gap(14));
-        content.addView(label(title, 32, TEXT, true));
+        content.addView(label(title, 31, TEXT, true));
         content.addView(gap(8));
         content.addView(label(subtitle, 15, MUTED, false));
         content.addView(gap(22));
 
         root.addView(scroll);
-        nav = buildNav(activeIndex);
-        root.addView(nav);
+        root.addView(buildNav(activeIndex));
         setContentView(root);
     }
 
@@ -146,14 +193,16 @@ public class MainActivity extends Activity {
         bar.setGravity(Gravity.CENTER);
         bar.setPadding(8, 8, 8, 12);
         bar.setBackgroundColor(Color.rgb(7, 11, 17));
-        String[] labels = {"Início", "Radar", "Criar", "Publicar"};
+
+        String[] labels = {"Início", "Achados", "Criar", "Publicar"};
         View.OnClickListener[] actions = new View.OnClickListener[]{
-            v -> showHome(), v -> showRadar(), v -> showCreator(), v -> showPublish()
+                v -> showHome(), v -> showAgent(), v -> showCreator(), v -> showPublish()
         };
+
         for (int i = 0; i < labels.length; i++) {
             TextView item = label(labels[i], 13, i == active ? BLUE_SOFT : MUTED, i == active);
             item.setGravity(Gravity.CENTER);
-            item.setPadding(8, 18, 8, 18);
+            item.setPadding(6, 18, 6, 18);
             item.setOnClickListener(actions[i]);
             item.setBackground(i == active ? bg(Color.rgb(13, 30, 52), 22, Color.TRANSPARENT) : null);
             bar.addView(item, new LinearLayout.LayoutParams(0, 88, 1f));
@@ -161,65 +210,179 @@ public class MainActivity extends Activity {
         return bar;
     }
 
-    private void showIntro() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(34, 48, 34, 34);
-        root.setBackgroundColor(BG);
-        root.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView brand = label("ALTIV • AFILIADOS IA", 12, BLUE_SOFT, true);
-        brand.setLetterSpacing(.10f);
-        root.addView(brand);
-        root.addView(gap(18));
-        root.addView(label("Mais simples. Mais rápido. Mais fácil de usar.", 34, TEXT, true));
-        root.addView(gap(14));
-        root.addView(label("A Beta 3 organiza o fluxo em três passos claros: encontrar produto, criar conteúdo e publicar.", 16, MUTED, false));
-        root.addView(gap(26));
-        root.addView(card("PASSO 1", "Encontre", "Use o Radar IA para visualizar oportunidades e escolher o que trabalhar.", null, null));
-        root.addView(card("PASSO 2", "Crie", "Gere texto, CTA e prepare a mídia sem sair do fluxo.", null, null));
-        root.addView(card("PASSO 3", "Publique", "Revise, aprove e acompanhe o que está pronto para postar.", null, null));
-        root.addView(gap(16));
-        root.addView(primary("Entrar no painel", v -> {
-            prefs.edit().putBoolean("intro_seen", true).apply();
-            showHome();
-        }));
-        setContentView(root);
-    }
-
     private void showHome() {
-        startScreen("home", "Painel simples para começar.", "Escolha o próximo passo. O aplicativo mostra o que fazer sem menus complicados.", 0);
+        startScreen("Venda com um fluxo simples.", "O agente encontra oportunidades. Você escolhe o produto, prepara o link, gera o texto e publica.", 0);
 
-        content.addView(card("COMECE AQUI", "Encontrar produto", "Abra o Radar IA e veja rapidamente os produtos que podem virar conteúdo.", "Abrir Radar IA", v -> showRadar()));
-        content.addView(card("ATALHO", "Criar conteúdo", "Já escolheu um produto? Vá direto para o criador e prepare sua publicação.", "Abrir Criador", v -> showCreator()));
+        LinearLayout agent = card("PASSO 1", "Agente de Achados", "Ordena produtos por potencial de vendas, comissão e tendência para destacar oportunidades mais interessantes.");
+        agent.addView(gap(16));
+        agent.addView(primary("Procurar melhores achados", v -> showAgent()));
+        content.addView(agent);
 
-        LinearLayout status = card("STATUS", "Aplicativo pronto para testes", "Beta 3 nativa, com navegação simplificada e sem dependência da Vercel.", null, null);
-        content.addView(status);
+        LinearLayout flow = card("FLUXO", "Achado → Link → Texto → Publicação", "Depois de selecionar um produto, o aplicativo leva você direto para a criação da postagem, sem telas desnecessárias.");
+        flow.addView(gap(16));
+        flow.addView(secondary("Continuar uma publicação", v -> showCreator()));
+        content.addView(flow);
+
+        content.addView(card("BETA 4", "Teste funcional local", "A busca usa dados de demonstração nesta versão. Geração de texto, cópia e compartilhamento já funcionam localmente. A busca real entra quando conectarmos a fonte de produtos."));
     }
 
-    private void showRadar() {
-        startScreen("radar", "Radar IA", "Escolha uma oportunidade e siga direto para a criação do conteúdo.", 1);
+    private List<Product> demoProducts() {
+        List<Product> products = new ArrayList<>();
+        products.add(new Product("Mini projetor portátil", 89.90, 12.0, 12400, 94));
+        products.add(new Product("Kit organizador de cozinha", 49.90, 16.0, 8700, 89));
+        products.add(new Product("Luminária LED recarregável", 39.90, 18.0, 6500, 91));
+        products.add(new Product("Suporte magnético para celular", 24.90, 20.0, 5100, 82));
+        Collections.sort(products, new Comparator<Product>() {
+            @Override public int compare(Product a, Product b) {
+                return Integer.compare(b.score, a.score);
+            }
+        });
+        return products;
+    }
 
-        content.addView(card("DESTAQUE", "Produto em alta", "Exemplo de oportunidade. Na próxima fase entram preço, comissão, origem e tendência real.", "Usar este produto", v -> {
-            Toast.makeText(this, "Produto selecionado", Toast.LENGTH_SHORT).show();
-            showCreator();
-        }));
-        content.addView(card("FILTROS RÁPIDOS", "Refine a busca", "Categoria, faixa de preço, comissão e potencial de conteúdo ficarão concentrados aqui.", "Testar filtros", v -> Toast.makeText(this, "Filtros prontos para integração", Toast.LENGTH_SHORT).show()));
+    private void showAgent() {
+        startScreen("Agente de Achados", "Veja primeiro os produtos com melhor combinação de vendas, comissão e tendência.", 1);
+
+        TextView demo = label("Dados de demonstração • integração real será conectada na próxima fase", 12, Color.rgb(245, 186, 79), true);
+        demo.setPadding(0, 0, 0, 10);
+        content.addView(demo);
+
+        int position = 1;
+        for (Product p : demoProducts()) {
+            String money = String.format(Locale.US, "R$ %.2f", p.price).replace(".", ",");
+            String commission = String.format(Locale.US, "R$ %.2f", p.estimatedCommission()).replace(".", ",");
+            String body = "Preço: " + money +
+                    "\nVendas: " + p.sales +
+                    "\nComissão: " + (int)p.commissionPct + "% • estimada " + commission +
+                    "\nTendência: " + p.trend + "/100";
+
+            LinearLayout product = card("TOP " + position + " • SCORE " + p.score + "/100", p.name, body);
+            TextView badge = label("Potencial " + (p.score >= 85 ? "alto" : "bom"), 13, GREEN, true);
+            product.addView(gap(10));
+            product.addView(badge);
+            product.addView(gap(14));
+            product.addView(primary("Usar este produto", v -> {
+                selectedProduct = p;
+                generatedCopy = "";
+                preparedLink = "";
+                showCreator();
+            }));
+            content.addView(product);
+            position++;
+        }
     }
 
     private void showCreator() {
-        startScreen("creator", "Criador com IA", "Um fluxo direto para transformar um produto em publicação.", 2);
+        startScreen("Criar publicação", "Produto escolhido → link → texto. Tudo na mesma tela.", 2);
 
-        content.addView(card("1 • TEXTO", "Copy automática", "Título, descrição, CTA e hashtags organizados em uma única etapa.", "Gerar exemplo", v -> Toast.makeText(this, "Exemplo de copy gerado", Toast.LENGTH_SHORT).show()));
-        content.addView(card("2 • MÍDIA", "Imagem ou vídeo", "Área preparada para adicionar a mídia do produto e criar a peça final.", "Adicionar mídia", v -> Toast.makeText(this, "Mídia será integrada na próxima fase", Toast.LENGTH_SHORT).show()));
-        content.addView(primary("Continuar para publicação", v -> showPublish()));
+        if (selectedProduct == null) {
+            LinearLayout empty = card("PASSO 1", "Escolha um produto primeiro", "Abra o Agente de Achados e selecione uma oportunidade para montar a publicação automaticamente.");
+            empty.addView(gap(16));
+            empty.addView(primary("Abrir Agente de Achados", v -> showAgent()));
+            content.addView(empty);
+            return;
+        }
+
+        String price = String.format(Locale.US, "R$ %.2f", selectedProduct.price).replace(".", ",");
+        content.addView(card("PRODUTO SELECIONADO • SCORE " + selectedProduct.score, selectedProduct.name, "Preço de referência: " + price + " • comissão " + (int)selectedProduct.commissionPct + "%"));
+
+        content.addView(label("1. Link do produto / afiliado", 17, TEXT, true));
+        content.addView(gap(6));
+        EditText linkInput = input("Cole aqui o link de afiliado do produto");
+        linkInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        if (!preparedLink.isEmpty()) linkInput.setText(preparedLink);
+        content.addView(linkInput);
+
+        content.addView(secondary("Preparar link", v -> {
+            String value = linkInput.getText().toString().trim();
+            if (value.isEmpty()) {
+                Toast.makeText(this, "Cole seu link de afiliado primeiro", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            preparedLink = value;
+            Toast.makeText(this, "Link preparado", Toast.LENGTH_SHORT).show();
+        }));
+
+        content.addView(gap(18));
+        content.addView(label("2. Texto da publicação", 17, TEXT, true));
+        content.addView(gap(6));
+
+        final EditText copyBox = input("O texto gerado aparecerá aqui");
+        copyBox.setMinLines(6);
+        if (!generatedCopy.isEmpty()) copyBox.setText(generatedCopy);
+        content.addView(copyBox);
+
+        content.addView(primary("Gerar texto automaticamente", v -> {
+            preparedLink = linkInput.getText().toString().trim();
+            String link = preparedLink.isEmpty() ? "[cole seu link de afiliado]" : preparedLink;
+            generatedCopy = "ACHADO DO DIA!\n\n" +
+                    selectedProduct.name + " por " + price + ".\n" +
+                    "Uma opção que está chamando atenção e pode valer a pena conferir.\n\n" +
+                    "Confira aqui: " + link + "\n\n" +
+                    "#achados #ofertas #promocao #comprasonline";
+            copyBox.setText(generatedCopy);
+            Toast.makeText(this, "Texto pronto", Toast.LENGTH_SHORT).show();
+        }));
+
+        content.addView(secondary("Copiar texto + link", v -> {
+            String current = copyBox.getText().toString().trim();
+            if (current.isEmpty()) {
+                Toast.makeText(this, "Gere o texto primeiro", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            generatedCopy = current;
+            ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            cb.setPrimaryClip(ClipData.newPlainText("ALTIV publicação", generatedCopy));
+            Toast.makeText(this, "Copiado", Toast.LENGTH_SHORT).show();
+        }));
+
+        content.addView(gap(18));
+        content.addView(primary("Continuar para publicar", v -> {
+            generatedCopy = copyBox.getText().toString().trim();
+            preparedLink = linkInput.getText().toString().trim();
+            showPublish();
+        }));
     }
 
     private void showPublish() {
-        startScreen("publish", "Publicações", "Veja apenas o que precisa de atenção: revisar, aprovar ou publicar.", 3);
+        startScreen("Publicar", "Escolha onde enviar. O ALTIV prepara o conteúdo e abre o aplicativo de destino.", 3);
 
-        content.addView(card("AGORA", "Fila de aprovação", "Os conteúdos preparados aparecerão aqui antes de serem publicados.", "Revisar conteúdo", v -> Toast.makeText(this, "Fila pronta para integração", Toast.LENGTH_SHORT).show()));
-        content.addView(card("DEPOIS", "Agenda", "Acompanhe publicações programadas e histórico de envios.", "Ver agenda", v -> Toast.makeText(this, "Agenda pronta para integração", Toast.LENGTH_SHORT).show()));
+        if (selectedProduct == null || generatedCopy.trim().isEmpty()) {
+            LinearLayout empty = card("FALTA CONTEÚDO", "Prepare a publicação primeiro", "Selecione um produto e gere o texto antes de abrir os canais de compartilhamento.");
+            empty.addView(gap(16));
+            empty.addView(primary("Voltar para Criar", v -> showCreator()));
+            content.addView(empty);
+            return;
+        }
+
+        content.addView(card("PRONTO PARA PUBLICAR", selectedProduct.name, generatedCopy));
+
+        content.addView(primary("Enviar para WhatsApp", v -> shareToPackage("com.whatsapp", "WhatsApp")));
+        content.addView(primary("Enviar para Instagram", v -> shareToPackage("com.instagram.android", "Instagram")));
+        content.addView(secondary("Mais opções de compartilhamento", v -> shareGeneral()));
+
+        content.addView(gap(12));
+        content.addView(card("PUBLICAÇÃO AUTOMÁTICA", "Próxima integração", "Para publicar sem abrir os aplicativos, será necessário conectar as APIs oficiais e autorizar as contas do Instagram/WhatsApp Business."));
+    }
+
+    private void shareToPackage(String packageName, String label) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, generatedCopy);
+        intent.setPackage(packageName);
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, label + " não encontrado. Abrindo opções de compartilhamento.", Toast.LENGTH_SHORT).show();
+            shareGeneral();
+        }
+    }
+
+    private void shareGeneral() {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, generatedCopy);
+        startActivity(Intent.createChooser(intent, "Publicar com ALTIV"));
     }
 
     @Override public void onBackPressed() {
