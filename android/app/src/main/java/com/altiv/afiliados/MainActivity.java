@@ -208,7 +208,7 @@ public class MainActivity extends Activity {
         root.addView(button("Criar conta",false,v -> authenticate(email.getText().toString().trim(),password.getText().toString(),"signup")));
 
         root.addView(gap(18));
-        root.addView(card("BETA 6","Backend conectado","Esta versão usa Supabase para autenticação, produtos e oportunidades."));
+        root.addView(card("BETA 7","Fontes conectáveis","Esta versão adiciona o fluxo de conexão, desconexão e tentativa de sincronização das fontes oficiais."));
         setContentView(scroll);
     }
 
@@ -498,6 +498,48 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void connectSource(String provider, String displayName) {
+        toast("Preparando conexão...");
+        runAsync(() -> {
+            JSONObject body = new JSONObject();
+            body.put("action","connect_source");
+            body.put("provider",provider);
+            body.put("display_name",displayName);
+            JSONObject result = callAgent(body);
+            if (result.has("error")) throw new Exception(result.optString("error"));
+            runOnUiThread(() -> {
+                Toast.makeText(this,"Fonte preparada. Falta concluir a autorização oficial.",Toast.LENGTH_LONG).show();
+                showSources();
+            });
+        });
+    }
+
+    private void disconnectSource(String provider) {
+        toast("Desconectando...");
+        runAsync(() -> {
+            JSONObject body = new JSONObject();
+            body.put("action","disconnect_source");
+            body.put("provider",provider);
+            callAgent(body);
+            runOnUiThread(this::showSources);
+        });
+    }
+
+    private void syncSource(String provider) {
+        toast("Sincronizando...");
+        runAsync(() -> {
+            JSONObject body = new JSONObject();
+            body.put("action","sync_products");
+            body.put("provider",provider);
+            JSONObject result = callAgent(body);
+            if (result.has("error")) throw new Exception(result.optString("error"));
+            runOnUiThread(() -> {
+                Toast.makeText(this,"Sincronização concluída",Toast.LENGTH_SHORT).show();
+                loadOpportunities();
+            });
+        });
+    }
+
     private void renderSources(JSONObject sources) {
         startScreen("Fontes","Conecte as fontes oficiais sem colocar segredos dentro do APK.",4);
         String shopee = "disconnected";
@@ -509,13 +551,23 @@ public class MainActivity extends Activity {
             if (t != null) tiktok = t.optString("connection_status","disconnected");
         }
 
-        LinearLayout s = card("SHOPEE","Status: "+statusLabel(shopee),"Integração oficial para buscar produtos e dados de afiliados.");
+        LinearLayout s = card("SHOPEE","Status: "+statusLabel(shopee),"Prepare sua conta para a integração oficial e sincronização de produtos.");
         s.addView(gap(12));
+        if ("disconnected".equals(shopee)) s.addView(button("Preparar conexão Shopee",true,v -> connectSource("shopee","Shopee Afiliados")));
+        else {
+            s.addView(button("Tentar sincronizar Shopee",true,v -> syncSource("shopee")));
+            s.addView(button("Desconectar Shopee",false,v -> disconnectSource("shopee")));
+        }
         s.addView(button("Abrir portal Shopee",false,v -> openUrl("https://affiliate.shopee.com.br/open_api/document?type=overview")));
         content.addView(s);
 
-        LinearLayout t = card("TIKTOK SHOP","Status: "+statusLabel(tiktok),"Integração oficial para produtos, analytics e oportunidades.");
+        LinearLayout t = card("TIKTOK SHOP","Status: "+statusLabel(tiktok),"Prepare sua conta para produtos, analytics e oportunidades oficiais.");
         t.addView(gap(12));
+        if ("disconnected".equals(tiktok)) t.addView(button("Preparar conexão TikTok",true,v -> connectSource("tiktok_shop","TikTok Shop")));
+        else {
+            t.addView(button("Tentar sincronizar TikTok",true,v -> syncSource("tiktok_shop")));
+            t.addView(button("Desconectar TikTok",false,v -> disconnectSource("tiktok_shop")));
+        }
         t.addView(button("Abrir TikTok Shop Partner",false,v -> openUrl("https://partner.tiktokshop.com/")));
         content.addView(t);
 
