@@ -1,4 +1,4 @@
-name: Build ALTIV Android Beta 5
+name: Build ALTIV Android Beta 6
 on:
   workflow_dispatch:
   push:
@@ -24,10 +24,10 @@ jobs:
         working-directory: android
         run: gradle assembleDebug
       - name: Prepare APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk ALTIV-Afiliados-IA-Beta5.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk ALTIV-Afiliados-IA-Beta6.apk
       - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete beta-5 --yes --cleanup-tag 2>/dev/null || true
-          gh release create beta-5 ALTIV-Afiliados-IA-Beta5.apk --title "ALTIV Afiliados IA - Beta 5" --notes "Produtos reais cadastrados localmente, ranking por score, fontes oficiais Shopee/TikTok, fluxo produto > link > texto > publicação."
+          gh release delete beta-6 --yes --cleanup-tag 2>/dev/null || true
+          gh release create beta-6 ALTIV-Afiliados-IA-Beta6.apk --title "ALTIV Afiliados IA - Beta 6" --notes "Login Supabase, backend affiliate-agent, produtos sincronizados, ranking remoto, geração de copy e compartilhamento WhatsApp/Instagram."

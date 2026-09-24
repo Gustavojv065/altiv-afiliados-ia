@@ -26,13 +26,22 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+    private static final String SUPABASE_URL = "https://sxnlcilvbgqcdbeytnkg.supabase.co";
+    private static final String SUPABASE_KEY = "sb_publishable_WNxNS-2w2_NlUp-_7AGU4A_5MegjG1o";
+    private static final String AGENT_URL = SUPABASE_URL + "/functions/v1/affiliate-agent";
+
     private final int BG = Color.rgb(5,8,13);
     private final int SURFACE = Color.rgb(12,18,27);
     private final int SURFACE_2 = Color.rgb(17,25,36);
@@ -43,43 +52,56 @@ public class MainActivity extends Activity {
     private final int MUTED = Color.rgb(158,172,192);
     private final int WARN = Color.rgb(245,186,79);
 
-    private LinearLayout content;
     private SharedPreferences prefs;
+    private LinearLayout content;
     private Product selectedProduct;
     private String generatedCopy = "";
 
     private static class Product {
-        String source, name, url;
-        double price, commissionPct;
-        int sales, trend, score;
+        String id, platform, title, url;
+        double price, commission;
+        long sales;
+        double trend, score;
 
-        Product(String source, String name, String url, double price, double commissionPct, int sales, int trend) {
-            this.source = source;
-            this.name = name;
+        Product(String id, String platform, String title, String url, double price, double commission, long sales, double trend, double score) {
+            this.id = id;
+            this.platform = platform;
+            this.title = title;
             this.url = url;
             this.price = price;
-            this.commissionPct = commissionPct;
+            this.commission = commission;
             this.sales = sales;
             this.trend = trend;
-            this.score = score();
+            this.score = score;
         }
-
-        int score() {
-            double salesScore = Math.min(100.0, Math.log10(Math.max(10, sales)) / 5.0 * 100.0);
-            double commissionScore = Math.min(100.0, commissionPct * 5.0);
-            double trendScore = Math.min(100.0, Math.max(0, trend));
-            return (int)Math.round(salesScore * .45 + commissionScore * .35 + trendScore * .20);
-        }
-
-        double estimatedCommission() { return price * (commissionPct / 100.0); }
     }
+
+    private interface NetworkTask { void run() throws Exception; }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences("altiv_beta5", MODE_PRIVATE);
+        prefs = getSharedPreferences("altiv_beta6", MODE_PRIVATE);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        showHome();
+        if (token().isEmpty()) showLogin();
+        else showHome();
+    }
+
+    private String token() { return prefs.getString("access_token", ""); }
+
+    private void saveSession(JSONObject auth) {
+        String access = auth.optString("access_token", "");
+        String refresh = auth.optString("refresh_token", "");
+        if (!access.isEmpty()) {
+            prefs.edit().putString("access_token", access).putString("refresh_token", refresh).apply();
+        }
+    }
+
+    private void logout() {
+        prefs.edit().remove("access_token").remove("refresh_token").apply();
+        selectedProduct = null;
+        generatedCopy = "";
+        showLogin();
     }
 
     private GradientDrawable bg(int color, float radius, int strokeColor) {
@@ -106,14 +128,14 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    private Button primary(String title, View.OnClickListener click) {
+    private Button button(String title, boolean primary, View.OnClickListener click) {
         Button b = new Button(this);
         b.setText(title);
         b.setTextColor(Color.WHITE);
         b.setTextSize(15);
         b.setAllCaps(false);
         b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        b.setBackground(bg(BLUE,28,Color.TRANSPARENT));
+        b.setBackground(primary ? bg(BLUE,28,Color.TRANSPARENT) : bg(SURFACE_2,28,Color.rgb(38,54,76)));
         b.setOnClickListener(click);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,112);
         lp.setMargins(0,8,0,8);
@@ -121,13 +143,7 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private Button secondary(String title, View.OnClickListener click) {
-        Button b = primary(title,click);
-        b.setBackground(bg(SURFACE_2,28,Color.rgb(38,54,76)));
-        return b;
-    }
-
-    private EditText input(String hint, boolean numeric) {
+    private EditText input(String hint, boolean secret, boolean numeric) {
         EditText e = new EditText(this);
         e.setHint(hint);
         e.setHintTextColor(Color.rgb(105,122,146));
@@ -135,7 +151,9 @@ public class MainActivity extends Activity {
         e.setTextSize(15);
         e.setPadding(24,18,24,18);
         e.setBackground(bg(SURFACE_2,24,Color.rgb(38,54,76)));
-        e.setInputType(numeric ? InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL : InputType.TYPE_CLASS_TEXT);
+        if (secret) e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        else if (numeric) e.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        else e.setInputType(InputType.TYPE_CLASS_TEXT);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0,8,0,10);
         e.setLayoutParams(lp);
@@ -161,6 +179,60 @@ public class MainActivity extends Activity {
         c.addView(gap(8));
         c.addView(label(body,15,MUTED,false));
         return c;
+    }
+
+    private void showLogin() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(BG);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(32,48,32,40);
+        scroll.addView(root);
+
+        TextView brand = label("ALTIV • AGENTE DE ACHADOS",12,BLUE_SOFT,true);
+        brand.setLetterSpacing(.10f);
+        root.addView(brand);
+        root.addView(gap(18));
+        root.addView(label("Entre para sincronizar seus achados.",32,TEXT,true));
+        root.addView(gap(10));
+        root.addView(label("Sua conta mantém produtos, ranking e publicações ligados ao seu usuário.",15,MUTED,false));
+        root.addView(gap(24));
+
+        EditText email = input("Seu e-mail",false,false);
+        email.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        EditText password = input("Sua senha",true,false);
+        root.addView(email);
+        root.addView(password);
+
+        root.addView(button("Entrar",true,v -> authenticate(email.getText().toString().trim(),password.getText().toString(),"login")));
+        root.addView(button("Criar conta",false,v -> authenticate(email.getText().toString().trim(),password.getText().toString(),"signup")));
+
+        root.addView(gap(18));
+        root.addView(card("BETA 6","Backend conectado","Esta versão usa Supabase para autenticação, produtos e oportunidades."));
+        setContentView(scroll);
+    }
+
+    private void authenticate(String email, String password, String mode) {
+        if (email.isEmpty() || password.length() < 6) {
+            Toast.makeText(this,"Informe e-mail e senha com pelo menos 6 caracteres",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        toast("Conectando...");
+        runAsync(() -> {
+            JSONObject body = new JSONObject();
+            body.put("email",email);
+            body.put("password",password);
+            String path = mode.equals("signup") ? "/auth/v1/signup" : "/auth/v1/token?grant_type=password";
+            JSONObject response = requestJson("POST",SUPABASE_URL + path,body,null);
+            String access = response.optString("access_token","");
+            if (access.isEmpty() && mode.equals("signup")) {
+                runOnUiThread(() -> Toast.makeText(this,"Conta criada. Se for solicitado, confirme o e-mail e depois entre.",Toast.LENGTH_LONG).show());
+                return;
+            }
+            if (access.isEmpty()) throw new Exception(response.optString("msg",response.optString("error_description","Falha na autenticação")));
+            saveSession(response);
+            runOnUiThread(this::showHome);
+        });
     }
 
     private void startScreen(String title, String subtitle, int active) {
@@ -195,18 +267,17 @@ public class MainActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
-        bar.setPadding(8,8,8,12);
+        bar.setPadding(6,8,6,12);
         bar.setBackgroundColor(Color.rgb(7,11,17));
 
         String[] labels = {"Início","Achados","Criar","Publicar","Fontes"};
         View.OnClickListener[] actions = new View.OnClickListener[]{
-                v -> showHome(), v -> showAgent(), v -> showCreator(), v -> showPublish(), v -> showSources()
+                v -> showHome(), v -> loadOpportunities(), v -> showCreator(), v -> showPublish(), v -> showSources()
         };
-
         for (int i=0;i<labels.length;i++) {
             TextView item = label(labels[i],12,i==active?BLUE_SOFT:MUTED,i==active);
             item.setGravity(Gravity.CENTER);
-            item.setPadding(4,18,4,18);
+            item.setPadding(3,18,3,18);
             item.setOnClickListener(actions[i]);
             item.setBackground(i==active?bg(Color.rgb(13,30,52),22,Color.TRANSPARENT):null);
             bar.addView(item,new LinearLayout.LayoutParams(0,88,1f));
@@ -215,244 +286,304 @@ public class MainActivity extends Activity {
     }
 
     private void showHome() {
-        startScreen("Do achado até a publicação.", "Fluxo simples: conectar fonte, avaliar oportunidade, gerar texto e compartilhar.",0);
+        startScreen("Seu agente de produtos rentáveis.", "Encontre, compare, gere conteúdo e publique em poucos passos.",0);
 
-        LinearLayout a = card("1 • ENCONTRAR","Melhores oportunidades","O ranking considera vendas, comissão e tendência para destacar produtos mais interessantes.");
-        a.addView(gap(16));
-        a.addView(primary("Ver Achados",v -> showAgent()));
+        LinearLayout a = card("1 • ACHADOS","Procurar oportunidades","Veja seus produtos ordenados automaticamente pelo score de vendas, comissão e tendência.");
+        a.addView(gap(14));
+        a.addView(button("Abrir Achados",true,v -> loadOpportunities()));
         content.addView(a);
 
-        LinearLayout b = card("2 • PRODUTO REAL","Adicionar produto","Enquanto as APIs automáticas não estão autorizadas, você pode cadastrar um produto real da Shopee ou TikTok e o agente calcula o score.");
-        b.addView(gap(16));
-        b.addView(secondary("Adicionar produto real",v -> showAddProduct()));
+        LinearLayout b = card("2 • ADICIONAR","Salvar produto real","Cadastre um produto real da Shopee ou TikTok e envie para o backend analisar.");
+        b.addView(gap(14));
+        b.addView(button("Adicionar produto",false,v -> showAddProduct()));
         content.addView(b);
 
-        LinearLayout c = card("3 • PUBLICAR","Link + texto + compartilhamento","Selecione o produto, use seu link de afiliado, gere a copy e envie para WhatsApp ou Instagram.");
-        c.addView(gap(16));
-        c.addView(secondary("Continuar publicação",v -> showCreator()));
+        LinearLayout c = card("3 • CONECTAR","Fontes oficiais","Confira o status das contas Shopee e TikTok e prepare as integrações automáticas.");
+        c.addView(gap(14));
+        c.addView(button("Ver Fontes",false,v -> showSources()));
         content.addView(c);
-    }
 
-    private void showSources() {
-        startScreen("Fontes oficiais","Use integrações oficiais para automatizar a busca. Segredos de API não ficam gravados dentro do APK.",4);
-
-        LinearLayout shopee = card("SHOPEE","Shopee Afiliados Open API","Existe um portal oficial de Open API para afiliados. A próxima etapa é autorizar sua conta e chamar a API por um backend seguro.");
-        shopee.addView(gap(14));
-        shopee.addView(primary("Abrir portal Shopee Afiliados",v -> openUrl("https://affiliate.shopee.com.br/open_api/document?type=overview")));
-        content.addView(shopee);
-
-        LinearLayout tt = card("TIKTOK SHOP","TikTok Shop Partner Center","O TikTok Shop oferece APIs oficiais para produtos, analytics, bestsellers e afiliados mediante autorização.");
-        tt.addView(gap(14));
-        tt.addView(primary("Abrir TikTok Shop Partner",v -> openUrl("https://partner.tiktokshop.com/")));
-        content.addView(tt);
-
-        content.addView(card("SEGURANÇA","Credenciais protegidas","App Secret, tokens e chaves privadas deverão ficar no backend. O Android receberá somente dados e sessões autorizadas."));
+        content.addView(button("Sair da conta",false,v -> logout()));
     }
 
     private void showAddProduct() {
-        startScreen("Adicionar produto real","Cadastre os dados visíveis do produto. O agente calcula e salva o score localmente.",1);
+        startScreen("Adicionar produto","Salve um produto real para o agente calcular a oportunidade.",1);
 
-        EditText source = input("Fonte: Shopee ou TikTok",false);
-        EditText name = input("Nome do produto",false);
-        EditText url = input("Link do produto / afiliado",false);
-        EditText price = input("Preço (ex.: 89.90)",true);
-        EditText commission = input("Comissão % (ex.: 12)",true);
-        EditText sales = input("Número de vendas",true);
-        EditText trend = input("Tendência de 0 a 100",true);
+        EditText platform = input("Plataforma: shopee ou tiktok_shop",false,false);
+        EditText title = input("Nome do produto",false,false);
+        EditText url = input("Link do produto / afiliado",false,false);
+        EditText price = input("Preço",false,true);
+        EditText commission = input("Comissão %",false,true);
+        EditText sales = input("Número de vendas",false,true);
+        EditText trend = input("Tendência 0 a 100",false,true);
 
-        content.addView(source);
-        content.addView(name);
-        content.addView(url);
-        content.addView(price);
-        content.addView(commission);
-        content.addView(sales);
-        content.addView(trend);
+        content.addView(platform); content.addView(title); content.addView(url);
+        content.addView(price); content.addView(commission); content.addView(sales); content.addView(trend);
 
-        content.addView(primary("Salvar e analisar",v -> {
+        content.addView(button("Salvar e analisar",true,v -> {
             try {
-                String s = source.getText().toString().trim();
-                String n = name.getText().toString().trim();
-                String u = url.getText().toString().trim();
-                if (s.isEmpty() || n.isEmpty() || u.isEmpty()) throw new Exception();
-                Product p = new Product(
-                        s,n,u,
-                        Double.parseDouble(price.getText().toString().replace(",",".")),
-                        Double.parseDouble(commission.getText().toString().replace(",",".")),
-                        Integer.parseInt(sales.getText().toString().trim()),
-                        Integer.parseInt(trend.getText().toString().trim())
-                );
-                saveProduct(p);
-                selectedProduct = p;
-                Toast.makeText(this,"Produto salvo. Score: "+p.score,Toast.LENGTH_LONG).show();
-                showAgent();
+                JSONObject p = new JSONObject();
+                String pf = platform.getText().toString().trim().toLowerCase();
+                if (pf.equals("tiktok")) pf = "tiktok_shop";
+                p.put("platform",pf);
+                p.put("title",title.getText().toString().trim());
+                p.put("product_url",url.getText().toString().trim());
+                p.put("price",Double.parseDouble(price.getText().toString().replace(",",".")));
+                p.put("commission_rate",Double.parseDouble(commission.getText().toString().replace(",",".")));
+                p.put("sales_count",Long.parseLong(sales.getText().toString().trim()));
+                p.put("trend_score",Double.parseDouble(trend.getText().toString().replace(",",".")));
+                if (p.optString("title").isEmpty() || (!pf.equals("shopee") && !pf.equals("tiktok_shop"))) {
+                    toast("Informe os dados corretamente");
+                    return;
+                }
+                JSONObject body = new JSONObject();
+                body.put("action","save_product");
+                body.put("product",p);
+                toast("Salvando...");
+                runAsync(() -> {
+                    JSONObject result = callAgent(body);
+                    if (result.has("error")) throw new Exception(result.optString("error"));
+                    runOnUiThread(() -> {
+                        Toast.makeText(this,"Produto analisado e salvo",Toast.LENGTH_SHORT).show();
+                        loadOpportunities();
+                    });
+                });
             } catch (Exception e) {
-                Toast.makeText(this,"Preencha todos os campos corretamente",Toast.LENGTH_SHORT).show();
+                toast("Preencha todos os campos corretamente");
             }
         }));
     }
 
-    private List<Product> loadProducts() {
-        List<Product> result = new ArrayList<>();
-        try {
-            JSONArray arr = new JSONArray(prefs.getString("products","[]"));
-            for (int i=0;i<arr.length();i++) {
-                JSONObject o = arr.getJSONObject(i);
-                result.add(new Product(
-                        o.optString("source"),
-                        o.optString("name"),
-                        o.optString("url"),
-                        o.optDouble("price"),
-                        o.optDouble("commission"),
-                        o.optInt("sales"),
-                        o.optInt("trend")
-                ));
+    private void loadOpportunities() {
+        startScreen("Achados","Carregando suas melhores oportunidades...",1);
+        runAsync(() -> {
+            JSONObject body = new JSONObject();
+            body.put("action","opportunities");
+            JSONObject result = callAgent(body);
+            JSONArray arr = result.optJSONArray("opportunities");
+            List<Product> products = new ArrayList<>();
+            if (arr != null) {
+                for (int i=0;i<arr.length();i++) {
+                    JSONObject op = arr.optJSONObject(i);
+                    JSONObject p = op != null ? op.optJSONObject("products") : null;
+                    if (p == null) continue;
+                    products.add(new Product(
+                            p.optString("id"),p.optString("platform"),p.optString("title"),p.optString("product_url"),
+                            p.optDouble("price"),p.optDouble("commission_rate"),p.optLong("sales_count"),
+                            p.optDouble("trend_score"),op.optDouble("score")
+                    ));
+                }
             }
-        } catch (Exception ignored) {}
-        Collections.sort(result,new Comparator<Product>() {
-            @Override public int compare(Product a, Product b) { return Integer.compare(b.score,a.score); }
+            runOnUiThread(() -> renderOpportunities(products));
         });
-        return result;
     }
 
-    private void saveProduct(Product p) {
-        try {
-            JSONArray arr = new JSONArray(prefs.getString("products","[]"));
-            JSONObject o = new JSONObject();
-            o.put("source",p.source);
-            o.put("name",p.name);
-            o.put("url",p.url);
-            o.put("price",p.price);
-            o.put("commission",p.commissionPct);
-            o.put("sales",p.sales);
-            o.put("trend",p.trend);
-            arr.put(o);
-            prefs.edit().putString("products",arr.toString()).apply();
-        } catch (Exception ignored) {}
-    }
-
-    private void showAgent() {
-        startScreen("Achados","Produtos cadastrados são ordenados pelo score de vendas, comissão e tendência.",1);
-
-        List<Product> products = loadProducts();
+    private void renderOpportunities(List<Product> products) {
+        startScreen("Achados","Ranking sincronizado pelo backend ALTIV.",1);
         if (products.isEmpty()) {
-            LinearLayout empty = card("SEM PRODUTOS","Adicione um produto real","Cadastre um produto da Shopee ou TikTok para o agente começar a comparar oportunidades.");
-            empty.addView(gap(16));
-            empty.addView(primary("Adicionar produto",v -> showAddProduct()));
-            content.addView(empty);
-            return;
-        }
-
-        int pos=1;
-        for (Product p:products) {
-            String price = String.format(Locale.US,"R$ %.2f",p.price).replace(".",",");
-            String est = String.format(Locale.US,"R$ %.2f",p.estimatedCommission()).replace(".",",");
-            String body = "Fonte: "+p.source+
-                    "\nPreço: "+price+
-                    "\nVendas: "+p.sales+
-                    "\nComissão: "+String.format(Locale.US,"%.1f",p.commissionPct).replace(".",",")+"% • "+est+
-                    "\nTendência: "+p.trend+"/100";
-            LinearLayout card = card("TOP "+pos+" • SCORE "+p.score+"/100",p.name,body);
-            card.addView(gap(10));
-            card.addView(label(p.score>=75?"Potencial alto":"Potencial moderado",13,p.score>=75?GREEN:WARN,true));
-            card.addView(gap(14));
-            card.addView(primary("Usar este produto",v -> {
-                selectedProduct=p;
-                generatedCopy="";
-                showCreator();
-            }));
-            content.addView(card);
-            pos++;
-        }
-
-        content.addView(secondary("+ Adicionar outro produto",v -> showAddProduct()));
-    }
-
-    private void showCreator() {
-        startScreen("Criar publicação","Produto → link → texto. Sem complicação.",2);
-
-        if (selectedProduct==null) {
-            List<Product> products=loadProducts();
-            if (!products.isEmpty()) selectedProduct=products.get(0);
-        }
-
-        if (selectedProduct==null) {
-            LinearLayout e=card("FALTA PRODUTO","Escolha um achado","Selecione ou adicione um produto antes de gerar a publicação.");
+            LinearLayout e = card("SEM ACHADOS","Adicione o primeiro produto","Depois de salvar um produto, ele aparece aqui com score calculado.");
             e.addView(gap(14));
-            e.addView(primary("Abrir Achados",v -> showAgent()));
+            e.addView(button("Adicionar produto",true,v -> showAddProduct()));
             content.addView(e);
             return;
         }
 
-        String price=String.format(Locale.US,"R$ %.2f",selectedProduct.price).replace(".",",");
-        content.addView(card("PRODUTO SELECIONADO • SCORE "+selectedProduct.score,selectedProduct.name,
-                "Fonte: "+selectedProduct.source+" • "+price+" • Comissão "+String.format(Locale.US,"%.1f",selectedProduct.commissionPct).replace(".",",")+"%"));
+        int pos = 1;
+        for (Product p:products) {
+            String price = String.format(Locale.US,"R$ %.2f",p.price).replace(".",",");
+            String body = "Fonte: "+p.platform+
+                    "\nPreço: "+price+
+                    "\nVendas: "+p.sales+
+                    "\nComissão: "+String.format(Locale.US,"%.1f",p.commission).replace(".",",")+"%"+
+                    "\nTendência: "+String.format(Locale.US,"%.0f",p.trend)+"/100";
+            LinearLayout c = card("TOP "+pos+" • SCORE "+String.format(Locale.US,"%.0f",p.score)+"/100",p.title,body);
+            c.addView(gap(10));
+            c.addView(label(p.score>=70?"Potencial alto":"Potencial em análise",13,p.score>=70?GREEN:WARN,true));
+            c.addView(gap(14));
+            c.addView(button("Criar publicação",true,v -> {
+                selectedProduct = p;
+                generatedCopy = "";
+                showCreator();
+            }));
+            content.addView(c);
+            pos++;
+        }
+    }
 
-        EditText link=input("Link do afiliado",false);
+    private void showCreator() {
+        startScreen("Criar publicação","Escolha o produto, confirme o link e gere o texto.",2);
+        if (selectedProduct == null) {
+            LinearLayout e = card("FALTA PRODUTO","Selecione um achado","Abra Achados e escolha o produto que deseja divulgar.");
+            e.addView(gap(14));
+            e.addView(button("Abrir Achados",true,v -> loadOpportunities()));
+            content.addView(e);
+            return;
+        }
+
+        String price = String.format(Locale.US,"R$ %.2f",selectedProduct.price).replace(".",",");
+        content.addView(card("SELECIONADO • SCORE "+String.format(Locale.US,"%.0f",selectedProduct.score),selectedProduct.title,
+                selectedProduct.platform+" • "+price+" • comissão "+String.format(Locale.US,"%.1f",selectedProduct.commission).replace(".",",")+"%"));
+
+        EditText link = input("Link de afiliado",false,false);
         link.setText(selectedProduct.url);
+        EditText copy = input("Texto da publicação",false,false);
+        copy.setMinLines(7);
+        if (!generatedCopy.isEmpty()) copy.setText(generatedCopy);
+
         content.addView(label("1. Link",17,TEXT,true));
         content.addView(link);
-
-        EditText copy=input("Texto gerado",false);
-        copy.setMinLines(6);
-        if (!generatedCopy.isEmpty()) copy.setText(generatedCopy);
         content.addView(gap(12));
         content.addView(label("2. Texto",17,TEXT,true));
         content.addView(copy);
 
-        content.addView(primary("Gerar texto",v -> {
-            String finalLink=link.getText().toString().trim();
-            generatedCopy="🔥 ACHADO DO DIA!\n\n"+
-                    selectedProduct.name+" por "+price+".\n"+
-                    "Produto em destaque com bom potencial de procura.\n\n"+
-                    "🛒 Confira aqui: "+finalLink+"\n\n"+
-                    "#achados #ofertas #promocao #comprasonline";
-            copy.setText(generatedCopy);
-            Toast.makeText(this,"Texto pronto",Toast.LENGTH_SHORT).show();
+        content.addView(button("Gerar texto com ALTIV",true,v -> {
+            toast("Gerando...");
+            runAsync(() -> {
+                JSONObject p = new JSONObject();
+                p.put("title",selectedProduct.title);
+                p.put("price",selectedProduct.price);
+                p.put("product_url",selectedProduct.url);
+                JSONObject body = new JSONObject();
+                body.put("action","generate_copy");
+                body.put("product",p);
+                body.put("affiliate_link",link.getText().toString().trim());
+                JSONObject result = callAgent(body);
+                String caption = result.optString("caption","");
+                if (caption.isEmpty()) throw new Exception("copy_failed");
+                generatedCopy = caption;
+                runOnUiThread(() -> copy.setText(caption));
+            });
         }));
 
-        content.addView(secondary("Copiar texto + link",v -> {
-            String value=copy.getText().toString().trim();
-            if (value.isEmpty()) {
-                Toast.makeText(this,"Gere o texto primeiro",Toast.LENGTH_SHORT).show();
-                return;
-            }
-            generatedCopy=value;
+        content.addView(button("Copiar texto + link",false,v -> {
+            String value = copy.getText().toString().trim();
+            if (value.isEmpty()) { toast("Gere o texto primeiro"); return; }
+            generatedCopy = value;
             ClipboardManager cb=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
-            cb.setPrimaryClip(ClipData.newPlainText("ALTIV",generatedCopy));
-            Toast.makeText(this,"Conteúdo copiado",Toast.LENGTH_SHORT).show();
+            cb.setPrimaryClip(ClipData.newPlainText("ALTIV",value));
+            toast("Conteúdo copiado");
         }));
 
-        content.addView(primary("Continuar para publicar",v -> {
-            generatedCopy=copy.getText().toString().trim();
-            if (generatedCopy.isEmpty()) {
-                Toast.makeText(this,"Gere o texto primeiro",Toast.LENGTH_SHORT).show();
-                return;
-            }
+        content.addView(button("Continuar para publicar",true,v -> {
+            generatedCopy = copy.getText().toString().trim();
+            if (generatedCopy.isEmpty()) { toast("Gere o texto primeiro"); return; }
             showPublish();
         }));
     }
 
     private void showPublish() {
-        startScreen("Publicar","Escolha o canal. O conteúdo continua sob sua aprovação antes do envio.",3);
-
-        if (selectedProduct==null || generatedCopy.trim().isEmpty()) {
-            LinearLayout e=card("FALTA CONTEÚDO","Prepare a publicação","Escolha um produto e gere o texto antes de compartilhar.");
+        startScreen("Publicar","Revise e escolha o canal. Você mantém o controle antes do envio.",3);
+        if (selectedProduct == null || generatedCopy.isEmpty()) {
+            LinearLayout e = card("SEM CONTEÚDO","Prepare a publicação","Selecione um produto e gere o texto antes de compartilhar.");
             e.addView(gap(14));
-            e.addView(primary("Ir para Criar",v -> showCreator()));
+            e.addView(button("Ir para Criar",true,v -> showCreator()));
             content.addView(e);
             return;
         }
 
-        content.addView(card("PRONTO",selectedProduct.name,generatedCopy));
-        content.addView(primary("Enviar para WhatsApp",v -> shareToPackage("com.whatsapp","WhatsApp")));
-        content.addView(primary("Enviar para Instagram",v -> shareToPackage("com.instagram.android","Instagram")));
-        content.addView(secondary("Mais opções",v -> shareGeneral()));
-        content.addView(card("AUTOMAÇÃO","Publicação automática","Para publicar sem abrir os aplicativos, vamos conectar as APIs oficiais e as permissões das contas. Esta versão mantém aprovação manual para evitar posts indevidos."));
+        content.addView(card("PRONTO PARA PUBLICAR",selectedProduct.title,generatedCopy));
+        content.addView(button("Enviar para WhatsApp",true,v -> shareToPackage("com.whatsapp","WhatsApp")));
+        content.addView(button("Enviar para Instagram",true,v -> shareToPackage("com.instagram.android","Instagram")));
+        content.addView(button("Mais opções",false,v -> shareGeneral()));
     }
+
+    private void showSources() {
+        startScreen("Fontes","Consultando o status das integrações...",4);
+        runAsync(() -> {
+            JSONObject body = new JSONObject();
+            body.put("action","source_status");
+            JSONObject result = callAgent(body);
+            JSONObject sources = result.optJSONObject("sources");
+            runOnUiThread(() -> renderSources(sources));
+        });
+    }
+
+    private void renderSources(JSONObject sources) {
+        startScreen("Fontes","Conecte as fontes oficiais sem colocar segredos dentro do APK.",4);
+        String shopee = "disconnected";
+        String tiktok = "disconnected";
+        if (sources != null) {
+            JSONObject s = sources.optJSONObject("shopee");
+            JSONObject t = sources.optJSONObject("tiktok_shop");
+            if (s != null) shopee = s.optString("connection_status","disconnected");
+            if (t != null) tiktok = t.optString("connection_status","disconnected");
+        }
+
+        LinearLayout s = card("SHOPEE","Status: "+statusLabel(shopee),"Integração oficial para buscar produtos e dados de afiliados.");
+        s.addView(gap(12));
+        s.addView(button("Abrir portal Shopee",false,v -> openUrl("https://affiliate.shopee.com.br/open_api/document?type=overview")));
+        content.addView(s);
+
+        LinearLayout t = card("TIKTOK SHOP","Status: "+statusLabel(tiktok),"Integração oficial para produtos, analytics e oportunidades.");
+        t.addView(gap(12));
+        t.addView(button("Abrir TikTok Shop Partner",false,v -> openUrl("https://partner.tiktokshop.com/")));
+        content.addView(t);
+
+        content.addView(card("PRÓXIMA ETAPA","Conectar automaticamente","Quando as credenciais oficiais forem autorizadas, o agente poderá sincronizar produtos sem cadastro manual."));
+    }
+
+    private String statusLabel(String s) {
+        if ("connected".equals(s)) return "Conectado";
+        if ("pending".equals(s)) return "Pendente";
+        if ("error".equals(s)) return "Erro";
+        return "Não conectado";
+    }
+
+    private JSONObject callAgent(JSONObject body) throws Exception {
+        return requestJson("POST",AGENT_URL,body,token());
+    }
+
+    private JSONObject requestJson(String method, String endpoint, JSONObject body, String bearer) throws Exception {
+        HttpURLConnection c = (HttpURLConnection)new URL(endpoint).openConnection();
+        c.setRequestMethod(method);
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(20000);
+        c.setRequestProperty("Content-Type","application/json");
+        c.setRequestProperty("apikey",SUPABASE_KEY);
+        if (bearer != null && !bearer.isEmpty()) c.setRequestProperty("Authorization","Bearer "+bearer);
+        c.setDoOutput(true);
+
+        byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
+        try (OutputStream os = c.getOutputStream()) { os.write(bytes); }
+
+        int code = c.getResponseCode();
+        InputStream is = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
+        StringBuilder sb = new StringBuilder();
+        if (is != null) {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(is,StandardCharsets.UTF_8))) {
+                String line;
+                while ((line=br.readLine()) != null) sb.append(line);
+            }
+        }
+        c.disconnect();
+
+        JSONObject result = sb.length()==0 ? new JSONObject() : new JSONObject(sb.toString());
+        if (code == 401 && bearer != null) {
+            runOnUiThread(() -> {
+                Toast.makeText(this,"Sessão expirada. Entre novamente.",Toast.LENGTH_LONG).show();
+                logout();
+            });
+            throw new Exception("unauthorized");
+        }
+        if (code < 200 || code >= 300) throw new Exception(result.optString("error_description",result.optString("msg",result.optString("error","Erro de conexão"))));
+        return result;
+    }
+
+    private void runAsync(NetworkTask task) {
+        new Thread(() -> {
+            try { task.run(); }
+            catch (Exception e) {
+                String msg = e.getMessage()==null ? "Falha de conexão" : e.getMessage();
+                runOnUiThread(() -> Toast.makeText(this,msg,Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    private void toast(String value) { Toast.makeText(this,value,Toast.LENGTH_SHORT).show(); }
 
     private void openUrl(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }
-        catch (Exception e) { Toast.makeText(this,"Não foi possível abrir o navegador",Toast.LENGTH_SHORT).show(); }
+        catch (Exception e) { toast("Não foi possível abrir o navegador"); }
     }
 
     private void shareToPackage(String packageName,String label) {
@@ -474,5 +605,8 @@ public class MainActivity extends Activity {
         startActivity(Intent.createChooser(intent,"Publicar com ALTIV"));
     }
 
-    @Override public void onBackPressed() { showHome(); }
+    @Override public void onBackPressed() {
+        if (token().isEmpty()) showLogin();
+        else showHome();
+    }
 }
