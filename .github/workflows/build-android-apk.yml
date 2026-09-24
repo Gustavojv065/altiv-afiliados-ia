@@ -8,6 +8,9 @@ on:
       - "android/**"
       - ".github/workflows/build-android-apk.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,7 +26,11 @@ jobs:
       - name: Build debug APK
         working-directory: android
         run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ALTIV-Afiliados-IA-Beta
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Prepare APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk ALTIV-Afiliados-IA-Beta1.apk
+      - name: Publish APK as GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete beta-1 --yes --cleanup-tag 2>/dev/null || true
+          gh release create beta-1 ALTIV-Afiliados-IA-Beta1.apk --title "ALTIV Afiliados IA - Beta 1" --notes "Primeira versão Android para testes."
