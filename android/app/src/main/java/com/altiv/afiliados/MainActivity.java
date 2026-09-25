@@ -12,6 +12,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
+import android.view.WindowInsets;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -78,6 +80,28 @@ public class MainActivity extends Activity {
 
     private interface NetworkTask { void run() throws Exception; }
 
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void applySystemInsets(View root) {
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            int top;
+            int bottom;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                top = bars.top;
+                bottom = bars.bottom;
+            } else {
+                top = insets.getSystemWindowInsetTop();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            v.setPadding(v.getPaddingLeft(), top, v.getPaddingRight(), bottom);
+            return insets;
+        });
+        root.requestApplyInsets();
+    }
+
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("altiv_beta6", MODE_PRIVATE);
@@ -107,7 +131,7 @@ public class MainActivity extends Activity {
     private GradientDrawable bg(int color, float radius, int strokeColor) {
         GradientDrawable d = new GradientDrawable();
         d.setColor(color);
-        d.setCornerRadius(radius);
+        d.setCornerRadius(dp((int)radius));
         if (strokeColor != Color.TRANSPARENT) d.setStroke(1, strokeColor);
         return d;
     }
@@ -124,7 +148,7 @@ public class MainActivity extends Activity {
 
     private View gap(int h) {
         View v = new View(this);
-        v.setLayoutParams(new LinearLayout.LayoutParams(1,h));
+        v.setLayoutParams(new LinearLayout.LayoutParams(1,dp(h)));
         return v;
     }
 
@@ -135,10 +159,10 @@ public class MainActivity extends Activity {
         b.setTextSize(15);
         b.setAllCaps(false);
         b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        b.setBackground(primary ? bg(BLUE,28,Color.TRANSPARENT) : bg(SURFACE_2,28,Color.rgb(38,54,76)));
+        b.setBackground(primary ? bg(BLUE,14,Color.TRANSPARENT) : bg(SURFACE_2,14,Color.rgb(38,54,76)));
         b.setOnClickListener(click);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,112);
-        lp.setMargins(0,8,0,8);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(56));
+        lp.setMargins(0,dp(4),0,dp(4));
         b.setLayoutParams(lp);
         return b;
     }
@@ -149,13 +173,13 @@ public class MainActivity extends Activity {
         e.setHintTextColor(Color.rgb(105,122,146));
         e.setTextColor(TEXT);
         e.setTextSize(15);
-        e.setPadding(24,18,24,18);
-        e.setBackground(bg(SURFACE_2,24,Color.rgb(38,54,76)));
+        e.setPadding(dp(16),dp(12),dp(16),dp(12));
+        e.setBackground(bg(SURFACE_2,14,Color.rgb(38,54,76)));
         if (secret) e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         else if (numeric) e.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         else e.setInputType(InputType.TYPE_CLASS_TEXT);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0,8,0,10);
+        lp.setMargins(0,dp(4),0,dp(8));
         e.setLayoutParams(lp);
         return e;
     }
@@ -163,10 +187,10 @@ public class MainActivity extends Activity {
     private LinearLayout card(String eyebrow, String title, String body) {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(26,22,26,22);
-        c.setBackground(bg(SURFACE,28,Color.rgb(24,38,56)));
+        c.setPadding(dp(16),dp(16),dp(16),dp(16));
+        c.setBackground(bg(SURFACE,16,Color.rgb(24,38,56)));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0,10,0,10);
+        lp.setMargins(0,dp(6),0,dp(6));
         c.setLayoutParams(lp);
 
         if (eyebrow != null && !eyebrow.isEmpty()) {
@@ -186,7 +210,7 @@ public class MainActivity extends Activity {
         scroll.setBackgroundColor(BG);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(32,48,32,40);
+        root.setPadding(dp(20),dp(28),dp(20),dp(24));
         scroll.addView(root);
 
         TextView brand = label("ALTIV • AGENTE DE ACHADOS",12,BLUE_SOFT,true);
@@ -208,7 +232,8 @@ public class MainActivity extends Activity {
         root.addView(button("Criar conta",false,v -> authenticate(email.getText().toString().trim(),password.getText().toString(),"signup")));
 
         root.addView(gap(18));
-        root.addView(card("BETA 7","Fontes conectáveis","Esta versão adiciona o fluxo de conexão, desconexão e tentativa de sincronização das fontes oficiais."));
+        root.addView(card("BETA 8","Layout responsivo","Interface ajustada para Android 15+, com respeito à barra de status, navegação do sistema e medidas em dp."));
+        applySystemInsets(scroll);
         setContentView(scroll);
     }
 
@@ -246,7 +271,7 @@ public class MainActivity extends Activity {
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(32,28,32,34);
+        content.setPadding(dp(18),dp(14),dp(18),dp(18));
         scroll.addView(content);
 
         TextView brand = label("ALTIV • AGENTE DE ACHADOS",12,BLUE_SOFT,true);
@@ -260,6 +285,7 @@ public class MainActivity extends Activity {
 
         root.addView(scroll);
         root.addView(buildNav(active));
+        applySystemInsets(root);
         setContentView(root);
     }
 
@@ -267,7 +293,7 @@ public class MainActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
-        bar.setPadding(6,8,6,12);
+        bar.setPadding(dp(4),dp(4),dp(4),dp(6));
         bar.setBackgroundColor(Color.rgb(7,11,17));
 
         String[] labels = {"Início","Achados","Criar","Publicar","Fontes"};
@@ -277,10 +303,10 @@ public class MainActivity extends Activity {
         for (int i=0;i<labels.length;i++) {
             TextView item = label(labels[i],12,i==active?BLUE_SOFT:MUTED,i==active);
             item.setGravity(Gravity.CENTER);
-            item.setPadding(3,18,3,18);
+            item.setPadding(dp(2),dp(10),dp(2),dp(10));
             item.setOnClickListener(actions[i]);
-            item.setBackground(i==active?bg(Color.rgb(13,30,52),22,Color.TRANSPARENT):null);
-            bar.addView(item,new LinearLayout.LayoutParams(0,88,1f));
+            item.setBackground(i==active?bg(Color.rgb(13,30,52),12,Color.TRANSPARENT):null);
+            bar.addView(item,new LinearLayout.LayoutParams(0,dp(56),1f));
         }
         return bar;
     }
