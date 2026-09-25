@@ -1,4 +1,4 @@
-name: Build ALTIV Android Beta 7
+name: Build ALTIV Android Beta 8
 on:
   workflow_dispatch:
   push:
@@ -24,10 +24,10 @@ jobs:
         working-directory: android
         run: gradle assembleDebug
       - name: Prepare APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk ALTIV-Afiliados-IA-Beta7.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk ALTIV-Afiliados-IA-Beta8.apk
       - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete beta-7 --yes --cleanup-tag 2>/dev/null || true
-          gh release create beta-7 ALTIV-Afiliados-IA-Beta7.apk --title "ALTIV Afiliados IA - Beta 7" --notes "Conexão de fontes Shopee/TikTok, status de integração, desconexão e tentativa de sincronização, mantendo login, ranking, copy e compartilhamento."
+          gh release delete beta-8 --yes --cleanup-tag 2>/dev/null || true
+          gh release create beta-8 ALTIV-Afiliados-IA-Beta8.apk --title "ALTIV Afiliados IA - Beta 8" --notes "Layout mobile responsivo: correção de status bar e navigation bar no Android 15+, medidas em dp, navegação inferior maior e conteúdo adaptado à tela."
