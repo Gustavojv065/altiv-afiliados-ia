@@ -1,11 +1,6 @@
 name: Build ALTIV Android Beta 8
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "android/**"
-      - ".github/workflows/build-android-v2.yml"
 permissions:
   contents: write
 jobs:

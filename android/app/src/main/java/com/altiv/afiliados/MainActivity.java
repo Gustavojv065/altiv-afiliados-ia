@@ -230,6 +230,9 @@ public class MainActivity extends Activity {
 
         root.addView(button("Entrar",true,v -> authenticate(email.getText().toString().trim(),password.getText().toString(),"login")));
         root.addView(button("Criar conta",false,v -> authenticate(email.getText().toString().trim(),password.getText().toString(),"signup")));
+        root.addView(gap(12));
+        root.addView(card("SHOPEE SEM API","Divulgue com a sua conta Shopee","Faça login no navegador seguro, importe o link de afiliado e prepare a mensagem sem criar uma conta ALTIV."));
+        root.addView(button("Acessar Shopee sem login ALTIV",true,v -> startActivity(new Intent(this,ShopeeFlowActivity.class))));
 
         root.addView(gap(18));
         root.addView(card("BETA 8","Layout responsivo","Interface ajustada para Android 15+, com respeito à barra de status, navegação do sistema e medidas em dp."));
@@ -329,6 +332,10 @@ public class MainActivity extends Activity {
         c.addView(button("Ver Fontes",false,v -> showSources()));
         content.addView(c);
 
+        LinearLayout shopeeFlow = card("SHOPEE SEM API","Central Shopee e WhatsApp","Abra o portal oficial, cole seu link personalizado, crie a legenda e compartilhe com os grupos escolhidos.");
+        shopeeFlow.addView(gap(12));
+        shopeeFlow.addView(button("Abrir central Shopee",true,v -> startActivity(new Intent(this,ShopeeFlowActivity.class))));
+        content.addView(shopeeFlow);
         content.addView(button("Sair da conta",false,v -> logout()));
     }
 
