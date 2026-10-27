@@ -273,75 +273,63 @@ public class ShopeeFlowActivity extends Activity {
         }
     }
 
-    private void pasteLink() {
+    private void pasteInformation() {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         ClipData clip = clipboard == null ? null : clipboard.getPrimaryClip();
         CharSequence text = clip != null && clip.getItemCount() > 0
                 ? clip.getItemAt(0).coerceToText(this) : null;
-        String url = text == null ? null : AffiliateLink.extract(text.toString());
-        if (url == null) {
-            toast("Copie um link HTTPS Shopee na sua conta de afiliado.");
+        if (text == null || text.length() == 0) {
+            toast("Copie as informações do produto na Shopee primeiro.");
             return;
         }
-        linkField.setText(url);
-        linkField.setSelection(url.length());
-        toast("Link colado. Confirme se ele contém seu código de afiliado.");
+        if (ShopeeShareParser.parse(text.toString()) == null) {
+            toast("O conteúdo copiado não inclui link HTTPS válido da Shopee.");
+            return;
+        }
+        sourceField.setText(text);
+        prepare();
+        toast("Oferta importada com texto, preço e link. Revise o anúncio.");
     }
 
-    private String validLink() {
-        String current = linkField.getText().toString().trim();
-        String url = AffiliateLink.extract(current);
-        if (url == null || !current.equals(url)) {
-            toast("Informe apenas uma URL HTTPS legítima da Shopee.");
-            return null;
+    private void prepare() {
+        ShopeeShareParser.Offer offer =
+                ShopeeShareParser.parse(sourceField.getText().toString());
+        if (offer == null) {
+            offerStatus.setText("Não foi encontrado link HTTPS válido da Shopee.");
+            toast("Copie as informações ou um link gerado na Shopee.");
+            return;
         }
-        return url;
+        showDetected(offer);
+        String content = offer.description.isEmpty()
+                ? "🛍️ Confira esta oferta na Shopee!" : offer.description;
+        captionField.setText(ShopeeShareParser.compose(offer, content));
+        save();
     }
 
     private boolean save() {
-        String url = validLink();
-        if (url == null) return false;
-        drafts.edit()
-                .putString("link", url)
-                .putString("product", productField.getText().toString().trim())
-                .putString("price", priceField.getText().toString().trim())
-                .putString("caption", captionField.getText().toString().trim())
+        ShopeeShareParser.Offer offer =
+                ShopeeShareParser.parse(sourceField.getText().toString());
+        if (offer == null) {
+            toast("Importe uma oferta com um link válido da Shopee.");
+            return false;
+        }
+        drafts.edit().putString("source", sourceField.getText().toString())
+                .putString("preview_v10", captionField.getText().toString())
                 .apply();
         return true;
     }
 
-    private void makeCaption() {
-        String url = validLink();
-        if (url == null) return;
-        String product = productField.getText().toString().trim();
-        if (product.isEmpty()) {
-            toast("Informe o nome do produto para gerar a legenda.");
-            productField.requestFocus();
-            return;
-        }
-        String amount = priceField.getText().toString().trim();
-        StringBuilder message = new StringBuilder("🛍️ Olha esse achado na Shopee!\n\n");
-        message.append(product).append("\n");
-        if (!amount.isEmpty()) message.append("Preço informado: R$ ").append(amount).append(" (confira na loja)\n");
-        message.append("\nVeja o produto e confira as condições:\n")
-                .append(url).append("\n\n#publi #Shopee");
-        captionField.setText(message.toString());
-        save();
-    }
-
     private String message() {
-        String url = validLink();
-        if (url == null) return null;
-        String value = captionField.getText().toString().trim();
-        if (value.isEmpty()) {
-            makeCaption();
-            value = captionField.getText().toString().trim();
-            if (value.isEmpty()) return null;
+        ShopeeShareParser.Offer offer =
+                ShopeeShareParser.parse(sourceField.getText().toString());
+        if (offer == null) {
+            toast("Importe primeiro informações com o link Shopee.");
+            return null;
         }
-        if (!value.contains(url)) value += "\n\nLink: " + url;
-        if (!value.toLowerCase(Locale.ROOT).contains("#publi")) value += "\n#publi";
-        captionField.setText(value);
-        return value;
+        String result = ShopeeShareParser.compose(offer, captionField.getText().toString());
+        captionField.setText(result);
+        showDetected(offer);
+        return result;
     }
 
     private void shareWhatsApp() {
