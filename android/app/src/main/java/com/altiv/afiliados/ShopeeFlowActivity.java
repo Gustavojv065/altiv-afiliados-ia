@@ -39,7 +39,8 @@ public class ShopeeFlowActivity extends Activity {
     private static final int WHITE = Color.rgb(246, 249, 255);
     private static final int MUTED = Color.rgb(167, 184, 206);
     private SharedPreferences drafts;
-    private EditText linkField, productField, priceField, captionField;
+    private EditText sourceField, captionField;
+    private TextView offerStatus;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -58,7 +59,7 @@ public class ShopeeFlowActivity extends Activity {
     private String readShare(Intent intent) {
         if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return null;
         CharSequence value = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
-        return value == null ? null : AffiliateLink.extract(value.toString());
+        return value == null ? null : value.toString();
     }
 
     private int dp(int unit) {
@@ -140,81 +141,120 @@ public class ShopeeFlowActivity extends Activity {
         return block;
     }
 
-    private void showScreen(String importedLink) {
+    private void showScreen(String sharedText) {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(BG);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        int horizontal = dp(18);
-        layout.setPadding(horizontal, dp(24), horizontal, dp(24));
+        int side = dp(18);
+        layout.setPadding(side, dp(24), side, dp(24));
         layout.setOnApplyWindowInsetsListener((view, insets) -> {
             int top, bottom;
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets bars = insets.getInsets(
-                        WindowInsets.Type.systemBars() | WindowInsets.Type.ime());
-                top = bars.top;
-                bottom = bars.bottom;
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.ime());
+                top = bars.top; bottom = bars.bottom;
             } else {
                 top = insets.getSystemWindowInsetTop();
                 bottom = insets.getSystemWindowInsetBottom();
             }
-            view.setPadding(horizontal, top + dp(14), horizontal, bottom + dp(24));
+            view.setPadding(side, top + dp(14), side, bottom + dp(24));
             return insets;
         });
         scroll.addView(layout);
         layout.addView(txt("ALTIV • AFILIADOS IA", 12, Color.rgb(138, 188, 255), true));
-        layout.addView(space(12));
-        layout.addView(txt("Central Shopee", 30, WHITE, true));
+        layout.addView(space(10));
+        layout.addView(txt("Achadinhos Shopee", 30, WHITE, true));
         layout.addView(space(8));
-        layout.addView(txt("Entre com sua conta na Shopee, gere seu link e divulgue pelo WhatsApp.", 15, MUTED, false));
-        layout.addView(space(22));
+        layout.addView(txt("Encontre ofertas no aplicativo Shopee, copie as informações e publique com um toque.", 15, MUTED, false));
+        layout.addView(space(18));
 
-        LinearLayout portal = box("01  Sua conta Shopee",
-                "Abre o portal oficial em uma aba segura do navegador Android. Sua senha não passa pelo ALTIV.");
-        portal.addView(btn("Abrir portal de afiliados", true, v -> openPortal()));
-        layout.addView(portal);
+        LinearLayout discovery = box("01  Encontrar ofertas",
+            "No app Shopee: Eu → Criadores e Afiliados → Recomendação. Avalie preço, comissão e avaliações antes de divulgar.");
+        discovery.addView(btn("Abrir aplicativo Shopee", true, v -> openShopeeApp()));
+        discovery.addView(btn("Abrir portal no navegador", false, v -> openPortal()));
+        discovery.addView(txt("A Shopee é aberta na tela inicial; você escolhe os produtos. A busca automática depende de acesso oficial à API.", 12, MUTED, false));
+        layout.addView(discovery);
 
-        LinearLayout product = box("02  Seu produto",
-                "Gere o link de afiliado na Shopee, copie e volte para colar aqui; ou compartilhe para o ALTIV.");
-        product.addView(btn("Colar link copiado", false, v -> pasteLink()));
-        linkField = edit("https://s.shopee.com.br/...", false);
-        linkField.setText(importedLink != null ? importedLink : drafts.getString("link", ""));
-        product.addView(txt("Link de afiliado", 13, WHITE, true));
-        product.addView(space(6));
-        product.addView(linkField);
-        productField = edit("Ex.: Fone Bluetooth", false);
-        productField.setText(drafts.getString("product", ""));
-        product.addView(txt("Produto", 13, WHITE, true));
-        product.addView(space(6));
-        product.addView(productField);
-        priceField = edit("Ex.: 49,90 — opcional", false);
-        priceField.setText(drafts.getString("price", ""));
-        product.addView(txt("Preço informado por você (opcional)", 13, WHITE, true));
-        product.addView(space(6));
-        product.addView(priceField);
-        layout.addView(product);
+        LinearLayout imported = box("02  Copiar informações",
+            "Na Shopee, use Compartilhar → Copiar Informações. Cole tudo de uma vez, inclusive a descrição e o link.");
+        imported.addView(btn("Colar informações da Shopee", true, v -> pasteInformation()));
+        sourceField = edit("Ex.: Dê uma olhada nesse produto por R$14,90 ... https://s.shopee.com.br/...", true);
+        sourceField.setMinLines(3);
+        String previous = drafts.getString("source", "");
+        if (previous.isEmpty()) {
+            String oldLink = drafts.getString("link", "");
+            if (!oldLink.isEmpty()) {
+                previous = drafts.getString("caption", "");
+                if (previous.isEmpty()) previous = drafts.getString("product", "");
+                if (!previous.contains(oldLink)) previous += " " + oldLink;
+            }
+        }
+        sourceField.setText(sharedText == null ? previous : sharedText);
+        imported.addView(sourceField);
+        offerStatus = txt("Cole a descrição e o link para identificar a oferta.", 13, MUTED, false);
+        imported.addView(offerStatus);
+        imported.addView(space(12));
+        imported.addView(btn("Preparar anúncio", false, v -> prepare()));
+        layout.addView(imported);
 
-        LinearLayout post = box("03  Criar e compartilhar",
-                "A primeira versão oferece modelo de legenda local. Revise antes de publicar; a IA Qwen virá depois.");
-        captionField = edit("A legenda vai aparecer aqui...", true);
-        captionField.setText(importedLink != null ? "" : drafts.getString("caption", ""));
-        post.addView(btn("Montar legenda", true, v -> makeCaption()));
-        post.addView(captionField);
-        post.addView(btn("Salvar rascunho", false, v -> {
-            if (save()) toast("Rascunho salvo neste aparelho.");
+        LinearLayout publish = box("03  Prévia da publicação",
+            "Uma mensagem e um único link. Revise o conteúdo antes de enviar.");
+        captionField = edit("A legenda aparecerá aqui...", true);
+        captionField.setMinLines(5);
+        captionField.setText(sharedText == null ? drafts.getString("preview_v10", "") : "");
+        publish.addView(captionField);
+        publish.addView(btn("Compartilhar no WhatsApp", true, v -> shareWhatsApp()));
+        publish.addView(btn("Copiar mensagem", false, v -> copyMessage()));
+        publish.addView(btn("Salvar rascunho", false, v -> {
+            if (save()) toast("Rascunho salvo neste celular.");
         }));
-        post.addView(btn("Compartilhar no WhatsApp", true, v -> shareWhatsApp()));
-        post.addView(btn("Copiar mensagem", false, v -> copyMessage()));
-        post.addView(txt("Você escolhe os grupos ou contatos no WhatsApp e confirma o envio. Não há disparo automático.", 12, MUTED, false));
-        layout.addView(post);
-        layout.addView(txt("ALTIV • Beta 9 • Conteúdo publicitário identificado com #publi", 12, MUTED, false));
+        publish.addView(txt("No WhatsApp, selecione seu grupo e confirme. Não há disparo automático.", 12, MUTED, false));
+        layout.addView(publish);
+        layout.addView(txt("ALTIV • Beta 10 • Sem acesso à API Shopee ou IA Qwen nesta etapa", 12, MUTED, false));
         setContentView(scroll);
         scroll.requestApplyInsets();
-        if (importedLink != null) toast("Link da Shopee importado. Confira se é seu link de afiliado.");
-        else if (Intent.ACTION_SEND.equals(getIntent() == null ? null : getIntent().getAction())) {
-            toast("Compartilhamento sem um link HTTPS Shopee válido.");
+        ShopeeShareParser.Offer detected = ShopeeShareParser.parse(sourceField.getText().toString());
+        if (sharedText != null) {
+            if (detected != null) {
+                prepare();
+                toast("Texto e link importados da Shopee.");
+            } else {
+                toast("Não encontrei um link válido da Shopee.");
+            }
+        } else if (detected != null) {
+            showDetected(detected);
+            if (captionField.getText().toString().trim().isEmpty()) prepare();
         }
+        sourceField.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s,int start,int count,int after) {}
+            @Override public void onTextChanged(CharSequence s,int start,int before,int count) {
+                captionField.setText("");
+                offerStatus.setText("Texto alterado: toque em Preparar anúncio.");
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+    }
+
+    private void showDetected(ShopeeShareParser.Offer offer) {
+        offerStatus.setText("✓ " + offer.title
+            + (offer.price.isEmpty() ? "" : " • R$ " + offer.price)
+            + "\n✓ Link reconhecido. Confirme que é o seu link de afiliado.");
+    }
+
+    private void openShopeeApp() {
+        try {
+            Intent launch = getPackageManager().getLaunchIntentForPackage("com.shopee.br");
+            if (launch != null) {
+                startActivity(launch);
+                return;
+            }
+        } catch (Exception ignored) {
+            // Sem acesso ao launcher do app no aparelho.
+        }
+        toast("Shopee não encontrada. Abrindo portal no navegador.");
+        openPortal();
     }
 
     private void openPortal() {
