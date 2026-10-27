@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <queries>
+        <package android:name="com.shopee.br" />
+    </queries>
     <application android:theme="@style/AppTheme" android:label="ALTIV Afiliados IA" android:allowBackup="true" android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
