@@ -1,10 +1,10 @@
-name: ALTIV Android Beta 9
+name: ALTIV Android Beta 10
 on:
   pull_request:
-    paths: ['android/**', '.github/workflows/build-android-beta9.yml']
+    paths: ['android/**', '.github/workflows/build-android-beta10.yml']
   push:
     branches: [main]
-    paths: ['android/**', '.github/workflows/build-android-beta9.yml']
+    paths: ['android/**', '.github/workflows/build-android-beta10.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -26,12 +26,19 @@ jobs:
           mkdir -p build/link-tests
           javac -encoding UTF-8 -d build/link-tests app/src/main/java/com/altiv/afiliados/AffiliateLink.java tests/AffiliateLinkTest.java
           java -cp build/link-tests AffiliateLinkTest
+      - name: Testar importação completa e link único
+        working-directory: android
+        run: |
+          javac -encoding UTF-8 -cp build/link-tests -d build/link-tests \
+            app/src/main/java/com/altiv/afiliados/ShopeeShareParser.java \
+            tests/ShopeeShareParserTest.java
+          java -cp build/link-tests ShopeeShareParserTest
       - name: Compilar APK debug
         working-directory: android
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: ALTIV-Afiliados-IA-Beta9
+          name: ALTIV-Afiliados-IA-Beta10
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publicar beta apos merge
@@ -39,5 +46,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="beta9-$GITHUB_RUN_NUMBER"
-          gh release create "$TAG" android/app/build/outputs/apk/debug/app-debug.apk --title "ALTIV Afiliados IA - Beta 9 ($GITHUB_RUN_NUMBER)" --notes "Central Shopee sem API: navegador seguro, links, legendas, rascunhos locais e WhatsApp assistido." --prerelease
+          TAG="beta10-$GITHUB_RUN_NUMBER"
+          gh release create "$TAG" android/app/build/outputs/apk/debug/app-debug.apk --title "ALTIV Afiliados IA - Beta 10 ($GITHUB_RUN_NUMBER)" --notes "Shopee sem API: importacao em um campo, descricao e preco, abertura do app oficial, legenda com link unico e WhatsApp assistido." --prerelease

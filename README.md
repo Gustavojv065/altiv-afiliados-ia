@@ -1,47 +1,48 @@
 # ALTIV Afiliados IA
 
-Aplicativo Android para divulgação de produtos de afiliados.
+App Android para criar divulgações de produtos Shopee com sua conta de afiliado, sem exigir credenciais da API.
 
-## Beta 9 — Shopee sem API
+## Beta 10 — Compartilhar em um único fluxo
 
-O botão "Acessar Shopee sem login ALTIV" abre a Central Shopee sem
-necessidade de cadastro no sistema ALTIV.
+1. Em **Achadinhos Shopee**, toque em **Abrir aplicativo Shopee**.
+2. No app oficial, entre em **Eu → Criadores e Afiliados → Recomendação**.
+3. Escolha uma oferta; confirme os dados do produto e gere um link válido da **sua conta de afiliado**.
+4. No compartilhamento da Shopee, escolha **Copiar Informações** ou compartilhe o texto para **ALTIV • Shopee**.
+5. Volte ao ALTIV e toque em **Colar informações da Shopee** (ou deixe que o app receba o compartilhamento).
+6. O texto, preço e link são interpretados localmente e a **prévia é criada com um único link**.
+7. Revise a mensagem e toque em **Compartilhar no WhatsApp**. Selecione manualmente os grupos e confirme o envio.
 
-1. Toque em "Abrir portal de afiliados". O portal será aberto no navegador
-   seguro do Android, dentro de uma aba integrada (Custom Tabs).
-2. Faça o login na Shopee e gere o seu link personalizado na ferramenta oficial.
-3. Copie o link e toque em "Colar link copiado", ou compartilhe o link pelo
-   Android, escolhendo "ALTIV • Shopee".
-4. Digite o produto e, se desejar, o preço. Monte a legenda e revise.
-5. Toque em "Compartilhar no WhatsApp", selecione os grupos ou contatos
-   e confirme a publicação manualmente.
+A prévia é editável e o aplicativo preserva apenas uma URL Shopee na mensagem final, mesmo quando o texto recebido contém links repetidos. O usuário pode guardar um rascunho no aparelho. A Beta 10 migra o rascunho da Beta 9 ao abrir a tela pela primeira vez, se houver conteúdo.
 
-A Beta 9 não lê senha/cookies Shopee, não varre produtos, não cria links
-de afiliado automaticamente, não dispara mensagens automaticamente
-em grupos e não usa IA/Qwen para geração de legenda. O gerador usa um
-modelo local de texto. Links são validados pelo domínio HTTPS; isso não
-comprova que o link está vinculado ao seu cadastro de afiliado.
+### Acesso à Shopee
 
-Os rascunhos ficam salvos somente no celular. Não houve alteração no
-Supabase nem nas funcionalidades existentes de login e ranking.
-A navegação integrada depende de navegador compatível instalado.
+A abertura do aplicativo oficial `com.shopee.br` é pela tela inicial pública instalada no celular. Não é possível garantir um atalho para a área privada de afiliados sem um deep link oficial documentado; siga o caminho **Eu → Criadores e Afiliados**. Se o aplicativo não estiver disponível, o ALTIV abre o portal `https://affiliate.shopee.com.br/` em Custom Tabs.
 
-## Compilação
+### Limites e privacidade
 
-JDK 17, Android SDK 35 e Gradle 8.10.2. Na pasta android,
-execute gradle assembleDebug. Saída: app/build/outputs/apk/debug/app-debug.apk.
+- Não lê cookies/senhas nem controla a sessão na Shopee.
+- Não faz scraping ou busca automática de ranking/comissão. A descoberta ocorre pela área Recomendação da Shopee; futuros filtros inteligentes podem usar dados fornecidos voluntariamente pelo usuário ou API autorizada.
+- Não gera/converte links afiliados de forma automática, nem garante vínculo do link com sua conta.
+- Não integra Qwen ou IA online nesta Beta. A prévia reutiliza as informações copiadas da Shopee e acrescenta uma única URL e `#publi` (sem inventar preços).
+- Não automatiza disparos em grupos ou extrai contatos WhatsApp.
+- Não altera Supabase: os rascunhos são locais e a área ALTIV existente continua separada.
 
-O workflow de Beta 9 verifica links Shopee e compila no GitHub Actions.
-Depois de merge em main, cria uma pré-release numerada sem apagar Beta 8.
-O APK de debug é voltado a testes, não a publicação na Play Store.
+## Compilar
 
-## Verificação funcional no aparelho
+JDK 17, Android SDK 35 e Gradle 8.10.2. Execute `gradle assembleDebug` na pasta `android/`.
+O arquivo fica em `android/app/build/outputs/apk/debug/app-debug.apk`.
+O workflow `.github/workflows/build-android-beta10.yml` testa o parser de links, a extração de informações e compila APK de debug. Após merge, publica pré-release Beta 10, sem apagar a Beta 9.
 
-- Abrir a Central Shopee sem login ALTIV.
-- Autenticar no portal oficial (testar inclusive login Google se usado).
-- Copiar um link personalizado e importar.
-- Compartilhar pela folha de compartilhamento do Android para o ALTIV.
-- Rejeitar domínios falsos e URLs HTTP.
-- Criar legenda, salvar e recuperar rascunho.
-- Compartilhar para um grupo WhatsApp de teste, confirmando envio.
-- Verificar login e navegação antiga para detectar regressões.
+## Testes manuais necessários
+
+- Abrir app Shopee instalado e entrar manualmente na área de afiliados.
+- Copiar Informações de produto com preço e link; verificar um único link na prévia.
+- Compartilhar diretamente texto Shopee para ALTIV.
+- Testar cópia contendo vários links Shopee e hashtags repetidas.
+- Rejeitar URLs HTTP ou domínios falsos.
+- Editar a prévia, salvar e reabrir a tela.
+- Confirmar que WhatsApp exige selecionar e confirmar grupo.
+- Verificar login ALTIV, outras páginas e layout mobile.
+- Preservar dados antes de reinstalar APK com assinatura diferente.
+
+APK de debug: apenas para testes internos.
