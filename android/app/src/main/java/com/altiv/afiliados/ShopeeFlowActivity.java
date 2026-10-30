@@ -172,7 +172,8 @@ public class ShopeeFlowActivity extends Activity {
 
         LinearLayout discovery = box("01  Encontrar ofertas",
             "No app Shopee: Eu → Criadores e Afiliados → Recomendação. Avalie preço, comissão e avaliações antes de divulgar.");
-        discovery.addView(btn("Abrir aplicativo Shopee", true, v -> openShopeeApp()));
+        discovery.addView(btn("NOVO • Radar automático de ofertas", true, v -> startActivity(new Intent(this, AutomationActivity.class))));
+        discovery.addView(btn("Abrir aplicativo Shopee", false, v -> openShopeeApp()));
         discovery.addView(btn("Abrir portal no navegador", false, v -> openPortal()));
         discovery.addView(txt("A Shopee é aberta na tela inicial; você escolhe os produtos. A busca automática depende de acesso oficial à API.", 12, MUTED, false));
         layout.addView(discovery);

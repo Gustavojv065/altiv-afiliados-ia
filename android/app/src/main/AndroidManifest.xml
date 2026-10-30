@@ -14,6 +14,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".AutomationActivity" android:exported="false" android:label="ALTIV Radar" />
         <activity
             android:name=".ShopeeFlowActivity"
             android:label="ALTIV • Shopee"
