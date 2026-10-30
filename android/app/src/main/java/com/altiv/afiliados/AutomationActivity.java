@@ -128,6 +128,8 @@ public class AutomationActivity extends Activity {
             JSONObject product=arr.optJSONObject(i);if(product==null)continue;
             LinearLayout item=card(product.optString("title"),product.optString("shopName")+" • "+product.optDouble("discount")+"% OFF");
             item.addView(text(String.format(new Locale("pt","BR"),"R$ %.2f",product.optDouble("price")),18,0xff71e2b2));
+            item.addView(text(String.format(new Locale("pt","BR"),"Comissão estimada: %.1f%%", 
+                product.optDouble("commissionRate",0) * 100.0),13,SUB));
             item.addView(button("Ver prévia e publicar",v->preview(product)));list.addView(item);
         }
     }

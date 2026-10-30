@@ -3,7 +3,7 @@
     <queries>
         <package android:name="com.shopee.br" />
     </queries>
-    <application android:theme="@style/AppTheme" android:label="ALTIV Afiliados IA" android:allowBackup="true" android:supportsRtl="true">
+    <application android:theme="@style/AppTheme" android:label="ALTIV Afiliados IA" android:allowBackup="false" android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
