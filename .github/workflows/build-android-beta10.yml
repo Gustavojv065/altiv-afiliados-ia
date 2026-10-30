@@ -1,4 +1,4 @@
-name: ALTIV Android Beta 10
+name: ALTIV Android Beta 11
 on:
   pull_request:
     paths: ['android/**', '.github/workflows/build-android-beta10.yml']
@@ -38,7 +38,7 @@ jobs:
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: ALTIV-Afiliados-IA-Beta10
+          name: ALTIV-Afiliados-IA-Beta11
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publicar beta apos merge
@@ -46,5 +46,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="beta10-$GITHUB_RUN_NUMBER"
-          gh release create "$TAG" android/app/build/outputs/apk/debug/app-debug.apk --title "ALTIV Afiliados IA - Beta 10 ($GITHUB_RUN_NUMBER)" --notes "Shopee sem API: importacao em um campo, descricao e preco, abertura do app oficial, legenda com link unico e WhatsApp assistido." --prerelease
+          TAG="beta11-$GITHUB_RUN_NUMBER"
+          gh release create "$TAG" android/app/build/outputs/apk/debug/app-debug.apk --title "ALTIV Afiliados IA - Beta 11 ($GITHUB_RUN_NUMBER)" --notes "Beta 11: Radar de ofertas com API oficial via servidor, busca e publicacao Telegram. Modo manual Beta 10 preservado." --prerelease

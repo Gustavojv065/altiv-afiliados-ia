@@ -1,9 +1,18 @@
 name: Validate ALTIV Web
 on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "lib/**"
+      - "package.json"
+      - "tsconfig.json"
+      - "next.config.ts"
+      - ".github/workflows/validate-web.yml"
   push:
     branches: [main]
     paths:
       - "app/**"
+      - "lib/**"
       - "package.json"
       - "tsconfig.json"
       - "next.config.ts"
@@ -18,4 +27,5 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
+      - run: npx tsc --noEmit
       - run: npm run build

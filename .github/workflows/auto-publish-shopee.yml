@@ -1,0 +1,41 @@
+name: Publicar ofertas Shopee (Telegram)
+on:
+  schedule:
+    # UTC 13,17,22 = 09,13,18 em Mato Grosso (UTC-4)
+    - cron: "0 13,17,22 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Simular sem enviar ao Telegram"
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: shopee-telegram-publicacoes
+  cancel-in-progress: false
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ALTIV_BACKEND_URL: ${{ secrets.ALTIV_BACKEND_URL }}
+      ALTIV_ACCESS_TOKEN: ${{ secrets.ALTIV_ACCESS_TOKEN }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/cache@v4
+        with:
+          path: automation-state.json
+          key: shopee-state-${{ github.run_id }}
+          restore-keys: |
+            shopee-state-
+      - name: Buscar, filtrar e publicar uma oferta
+        if: env.ALTIV_BACKEND_URL != '' && env.ALTIV_ACCESS_TOKEN != ''
+        run: node scripts/auto-publish.mjs
+      - name: Aviso quando não configurado
+        if: env.ALTIV_BACKEND_URL == '' || env.ALTIV_ACCESS_TOKEN == ''
+        run: echo "Configure os Secrets ALTIV_BACKEND_URL e ALTIV_ACCESS_TOKEN para ativar a automação."
